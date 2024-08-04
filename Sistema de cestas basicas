@@ -1,0 +1,181 @@
+import csv
+from datetime import datetime
+
+# Nome do arquivo CSV para armazenar os dados
+DATABASE_FILE = 'distribuicao_cestas_basicas.csv'
+ESTOQUE_FILE = 'estoque_alimentos.csv'
+
+def init_database():
+    """Inicializa o banco de dados e o estoque se eles não existirem."""
+    try:
+        with open(DATABASE_FILE, 'x', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(['ID', 'Nome', 'Endereço', 'Número de Membros da Família', 'Data de Registro',
+                             'Data de Distribuição', 'Cestas Recebidas', 'Alimentos Distribuídos'])
+    except FileExistsError:
+        pass
+
+    try:
+        with open(ESTOQUE_FILE, 'x', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(['Alimento', 'Quantidade'])
+            # Adicionando alguns alimentos iniciais para o exemplo
+            writer.writerow(['Arroz', 100])
+            writer.writerow(['Feijão', 80])
+            writer.writerow(['Macarrão', 120])
+            writer.writerow(['Óleo', 50])
+    except FileExistsError:
+        pass
+
+def registrar_pessoa():
+    """Registra uma nova pessoa no banco de dados."""
+    nome = input("Digite o nome: ")
+    endereco = input("Digite o endereço: ")
+    num_membros = input("Digite o número de membros da família: ")
+
+    with open(DATABASE_FILE, 'a', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        data_registro = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        writer.writerow([get_next_id(), nome, endereco, num_membros, data_registro, '', 0, ''])
+        print(f"{nome} foi registrado com sucesso!")
+
+def distribuir_cesta():
+    """Registra a distribuição de uma cesta para uma pessoa."""
+    pessoa_id = input("Digite o ID da pessoa: ")
+
+    # Carregar estoque
+    estoque = carregar_estoque()
+
+    print("\nEstoque disponível:")
+    for alimento, quantidade in estoque.items():
+        print(f"{alimento}: {quantidade}")
+
+    # Selecionar alimentos
+    alimentos_selecionados = {}
+    while True:
+        alimento = input("\nDigite o alimento a ser distribuído (ou 'sair' para finalizar): ").strip()
+        if alimento.lower() == 'sair':
+            break
+        if alimento not in estoque:
+            print("Alimento não encontrado no estoque.")
+            continue
+        quantidade = int(input(f"Digite a quantidade de {alimento} a ser distribuída: "))
+        if quantidade > estoque[alimento]:
+            print(f"Quantidade insuficiente de {alimento}. Disponível: {estoque[alimento]}")
+            continue
+        alimentos_selecionados[alimento] = quantidade
+
+    if not alimentos_selecionados:
+        print("Nenhum alimento foi selecionado para distribuição.")
+        return
+
+    # Atualizar banco de dados de pessoas
+    rows = []
+    found = False
+    with open(DATABASE_FILE, 'r', newline='') as csvfile:
+        reader = csv.reader(csvfile)
+        for row in reader:
+            if row[0] == pessoa_id:
+                found = True
+                row[5] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')  # Data de Distribuição
+                # Verifica se o valor é um número, caso contrário inicializa com 0
+                cestas_recebidas = row[6]
+                if not cestas_recebidas.isdigit():
+                    cestas_recebidas = 0
+                else:
+                    cestas_recebidas = int(cestas_recebidas)
+                row[6] = cestas_recebidas + 1  # Incrementa o contador de cestas recebidas
+                row[7] = ', '.join(f"{alimento} ({quantidade})" for alimento, quantidade in alimentos_selecionados.items())
+                print(f"Cesta básica distribuída para {row[1]} com os seguintes alimentos: {row[7]}.")
+            rows.append(row)
+
+    if found:
+        with open(DATABASE_FILE, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerows(rows)
+    else:
+        print("ID não encontrado.")
+        return
+
+    # Atualizar estoque
+    for alimento, quantidade in alimentos_selecionados.items():
+        estoque[alimento] -= quantidade
+    salvar_estoque(estoque)
+
+def carregar_estoque():
+    """Carrega o estoque de alimentos do arquivo."""
+    estoque = {}
+    with open(ESTOQUE_FILE, 'r', newline='') as csvfile:
+        reader = csv.reader(csvfile)
+        next(reader)  # Pula o cabeçalho
+        for row in reader:
+            alimento, quantidade = row
+            estoque[alimento] = int(quantidade)
+    return estoque
+
+def salvar_estoque(estoque):
+    """Salva o estoque de alimentos no arquivo."""
+    with open(ESTOQUE_FILE, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(['Alimento', 'Quantidade'])
+        for alimento, quantidade in estoque.items():
+            writer.writerow([alimento, quantidade])
+
+def listar_pessoas():
+    """Lista todas as pessoas registradas no banco de dados."""
+    try:
+        with open(DATABASE_FILE, 'r', newline='') as csvfile:
+            reader = csv.reader(csvfile)
+            next(reader)  # Pula o cabeçalho
+            for row in reader:
+                if len(row) != 8:
+                    print(f"Linha inválida encontrada: {row}")
+                    continue
+                print(f"ID: {row[0]}, Nome: {row[1]}, Endereço: {row[2]}, Membros da Família: {row[3]}, "
+                      f"Cestas Recebidas: {row[6]}, Alimentos Distribuídos: {row[7]}")
+    except FileNotFoundError:
+        print("O arquivo do banco de dados não foi encontrado. Certifique-se de que o arquivo exista e tente novamente.")
+
+def listar_estoque():
+    """Lista o estoque atual de alimentos."""
+    estoque = carregar_estoque()
+    print("\nEstoque atual:")
+    for alimento, quantidade in estoque.items():
+        print(f"{alimento}: {quantidade}")
+
+def get_next_id():
+    """Obtém o próximo ID disponível no banco de dados."""
+    with open(DATABASE_FILE, 'r', newline='') as csvfile:
+        reader = csv.reader(csvfile)
+        next(reader)  # Pula o cabeçalho
+        ids = [int(row[0]) for row in reader if row[0].isdigit()]
+        return max(ids, default=0) + 1
+
+def main():
+    init_database()
+
+    while True:
+        print("\nSistema de Distribuição de Cestas Básicas")
+        print("1. Registrar Pessoa")
+        print("2. Distribuir Cesta")
+        print("3. Listar Pessoas")
+        print("4. Listar Estoque")
+        print("5. Sair")
+
+        escolha = input("Escolha uma opção: ")
+
+        if escolha == '1':
+            registrar_pessoa()
+        elif escolha == '2':
+            distribuir_cesta()
+        elif escolha == '3':
+            listar_pessoas()
+        elif escolha == '4':
+            listar_estoque()
+        elif escolha == '5':
+            break
+        else:
+            print("Opção inválida. Tente novamente.")
+
+if __name__ == '__main__':
+    main()

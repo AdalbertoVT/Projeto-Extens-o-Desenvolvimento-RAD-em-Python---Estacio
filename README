@@ -1,0 +1,7 @@
+echo "# Projeto-Extens-o-Desenvolvimento-RAD-em-Python---Estacio" >> README.md
+git init
+git add README.md
+git commit -m "first commit"
+git branch -M main
+git remote add origin https://github.com/AdalbertoVT/Projeto-Extens-o-Desenvolvimento-RAD-em-Python---Estacio.git
+git push -u origin main

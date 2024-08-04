@@ -1,0 +1,91 @@
+import csv
+from datetime import datetime
+
+# Nome do arquivo CSV para armazenar os dados
+DATABASE_FILE = 'distribuicao_cestas_basicas.csv'
+
+def init_database():
+    """Inicializa o banco de dados se ele não existir."""
+    try:
+        with open(DATABASE_FILE, 'x', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(['ID', 'Nome', 'Endereço', 'Data de Registro', 'Data de Distribuição', 'Cestas Recebidas'])
+    except FileExistsError:
+        pass
+
+def registrar_pessoa():
+    """Registra uma nova pessoa no banco de dados."""
+    nome = input("Digite o nome: ")
+    endereco = input("Digite o endereço: ")
+
+    with open(DATABASE_FILE, 'a', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        data_registro = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        writer.writerow([get_next_id(), nome, endereco, data_registro, '', 0])
+        print(f"{nome} foi registrado com sucesso!")
+
+def distribuir_cesta():
+    """Registra a distribuição de uma cesta para uma pessoa."""
+    pessoa_id = input("Digite o ID da pessoa: ")
+
+    rows = []
+    found = False
+    with open(DATABASE_FILE, 'r', newline='') as csvfile:
+        reader = csv.reader(csvfile)
+        for row in reader:
+            if row[0] == pessoa_id:
+                found = True
+                row[4] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')  # Data de Distribuição
+                row[5] = int(row[5]) + 1  # Incrementa o contador de cestas recebidas
+                print(f"Cesta básica distribuída para {row[1]}.")
+            rows.append(row)
+
+    if found:
+        with open(DATABASE_FILE, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerows(rows)
+    else:
+        print("ID não encontrado.")
+
+def listar_pessoas():
+    """Lista todas as pessoas registradas no banco de dados."""
+    with open(DATABASE_FILE, 'r', newline='') as csvfile:
+        reader = csv.reader(csvfile)
+        next(reader)  # Pula o cabeçalho
+        for row in reader:
+            print(row)
+
+def get_next_id():
+    """Obtém o próximo ID disponível no banco de dados."""
+    with open(DATABASE_FILE, 'r', newline='') as csvfile:
+        reader = csv.reader(csvfile)
+        next(reader)  # Pula o cabeçalho
+        ids = [int(row[0]) for row in reader if row[0].isdigit()]
+        return max(ids, default=0) + 1
+
+def main():
+    init_database()
+
+    while True:
+        print("\nSistema de Distribuição de Cestas Básicas")
+        print("1. Registrar Pessoa")
+        print("2. Distribuir Cesta")
+        print("3. Listar Pessoas")
+        print("4. Sair")
+
+        escolha = input("Escolha uma opção: ")
+
+        if escolha == '1':
+            registrar_pessoa()
+        elif escolha == '2':
+            distribuir_cesta()
+        elif escolha == '3':
+            listar_pessoas()
+        elif escolha == '4':
+            break
+        else:
+            print("Opção inválida. Tente novamente.")
+
+if __name__ == '__main__':
+    main()
+    

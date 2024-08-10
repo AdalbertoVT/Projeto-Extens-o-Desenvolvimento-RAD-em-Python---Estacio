@@ -10,8 +10,9 @@ def init_database():
     try:
         with open(DATABASE_FILE, 'x', newline='') as csvfile:
             writer = csv.writer(csvfile)
-            writer.writerow(['ID', 'Nome', 'Endereço', 'Número de Membros da Família', 'Data de Registro',
-                             'Data de Distribuição', 'Cestas Recebidas', 'Alimentos Distribuídos'])
+            writer.writerow(['ID', 'Nome', 'Endereço', 'Número de Membros da Família', 'CPF', 'Contato',
+                             'Nome do Responsável', 'CPF do Responsável', 'Contato do Responsável',
+                             'Data de Registro', 'Data de Distribuição', 'Cestas Recebidas', 'Alimentos Distribuídos'])
     except FileExistsError:
         pass
 
@@ -32,12 +33,19 @@ def registrar_pessoa():
     nome = input("Digite o nome: ")
     endereco = input("Digite o endereço: ")
     num_membros = input("Digite o número de membros da família: ")
+    cpf = input("Digite o CPF: ")
+    contato = input("Digite o contato (telefone ou email): ")
+
+    nome_responsavel = input("Digite o nome do responsável: ")
+    cpf_responsavel = input("Digite o CPF do responsável: ")
+    contato_responsavel = input("Digite o contato do responsável: ")
 
     with open(DATABASE_FILE, 'a', newline='') as csvfile:
         writer = csv.writer(csvfile)
         data_registro = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        writer.writerow([get_next_id(), nome, endereco, num_membros, data_registro, '', 0, ''])
-        print(f"{nome} foi registrado com sucesso!")
+        writer.writerow([get_next_id(), nome, endereco, num_membros, cpf, contato,
+                         nome_responsavel, cpf_responsavel, contato_responsavel, data_registro, '', 0, ''])
+        print(f"{nome} foi registrado(a) com sucesso!")
 
 def distribuir_cesta():
     """Registra a distribuição de uma cesta para uma pessoa."""
@@ -128,11 +136,13 @@ def listar_pessoas():
             reader = csv.reader(csvfile)
             next(reader)  # Pula o cabeçalho
             for row in reader:
-                if len(row) != 8:
+                if len(row) != 13:  # Verifica se a linha tem o número esperado de campos
                     print(f"Linha inválida encontrada: {row}")
                     continue
                 print(f"ID: {row[0]}, Nome: {row[1]}, Endereço: {row[2]}, Membros da Família: {row[3]}, "
-                      f"Cestas Recebidas: {row[6]}, Alimentos Distribuídos: {row[7]}")
+                      f"CPF: {row[4]}, Contato: {row[5]}, "
+                      f"Nome do Responsável: {row[6]}, CPF do Responsável: {row[7]}, Contato do Responsável: {row[8]}, "
+                      f"Data de Registro: {row[9]}, Cestas Recebidas: {row[11]}, Alimentos Distribuídos: {row[12]}")
     except FileNotFoundError:
         print("O arquivo do banco de dados não foi encontrado. Certifique-se de que o arquivo exista e tente novamente.")
 

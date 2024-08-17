@@ -48,7 +48,7 @@ def init_database():
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS estoque (
                     id SERIAL PRIMARY KEY,
-                    alimento VARCHAR(255) NOT NULL UNIQUE,
+                    alimento VARCHAR(255) NOT NULL,
                     quantidade INT NOT NULL
                 );
             """)
@@ -67,6 +67,26 @@ def init_database():
     except Exception as e:
         print("Erro ao inicializar o banco de dados:", e)
         conn.rollback()
+    finally:
+        conn.close()
+
+def adicionar_coluna_se_nao_existir(conn, tabela, coluna, tipo):
+    """Adiciona uma coluna a uma tabela se ela não existir."""
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(f"ALTER TABLE {tabela} ADD COLUMN IF NOT EXISTS {coluna} {tipo};")
+        conn.commit()
+        print(f"Coluna '{coluna}' adicionada à tabela '{tabela}' com sucesso!")
+    except Exception as e:
+        print(f"Erro ao adicionar a coluna '{coluna}' à tabela '{tabela}':", e)
+        conn.rollback()
+
+def adicionar_colunas_faltantes():
+    """Adiciona as colunas cestas_recebidas e alimentos_distribuidos na tabela pessoa, se não existirem."""
+    conn = get_connection()
+    try:
+        adicionar_coluna_se_nao_existir(conn, 'pessoa', 'cestas_recebidas', 'INT DEFAULT 0')
+        adicionar_coluna_se_nao_existir(conn, 'pessoa', 'alimentos_distribuidos', 'TEXT')
     finally:
         conn.close()
 
@@ -161,6 +181,24 @@ def listar_pessoas(conn):
     except Exception as e:
         print("Erro ao listar pessoas:", e)
 
+def registrar_alimento(conn):
+    """Registra novos alimentos no estoque."""
+    alimento = input("Digite o nome do alimento: ")
+    quantidade = int(input("Digite a quantidade do alimento: "))
+
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                INSERT INTO estoque (alimento, quantidade)
+                VALUES (%s, %s)
+                ON CONFLICT (alimento) DO UPDATE SET quantidade = estoque.quantidade + EXCLUDED.quantidade;
+            """, (alimento, quantidade))
+            conn.commit()
+            print(f"{quantidade} unidades de {alimento} foram adicionadas ao estoque.")
+    except Exception as e:
+        print("Erro ao adicionar item ao estoque:", e)
+        conn.rollback()
+
 def listar_estoque(conn):
     """Lista o estoque atual de alimentos."""
     try:
@@ -173,116 +211,86 @@ def listar_estoque(conn):
     except Exception as e:
         print("Erro ao listar o estoque:", e)
 
-def adicionar_estoque(conn):
-    """Adiciona um novo item ao estoque."""
-    alimento = input("Digite o nome do alimento: ")
-    quantidade = input("Digite a quantidade: ")
-
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute(
-                "INSERT INTO estoque (alimento, quantidade) VALUES (%s, %s) ON CONFLICT (alimento) DO UPDATE SET quantidade = estoque.quantidade + EXCLUDED.quantidade",
-                (alimento, quantidade)
-            )
-            conn.commit()
-            print(f"Item '{alimento}' adicionado ao estoque com sucesso!")
-    except Exception as e:
-        print("Erro ao adicionar item ao estoque:", e)
-        conn.rollback()
-
 def distribuir_cesta(conn):
-    """Distribui uma cesta básica para uma pessoa registrada."""
-    pessoa_id = input("Digite o ID da pessoa para quem a cesta será distribuída: ")
+    """Distribui uma cesta básica para uma pessoa cadastrada."""
+    listar_pessoas(conn)
+    pessoa_id = int(input("Digite o ID da pessoa que irá receber a cesta: "))
 
     try:
         with conn.cursor() as cursor:
-            # Verifica se a pessoa existe e possui alimentos disponíveis
-            cursor.execute("SELECT * FROM pessoa WHERE id = %s", (pessoa_id,))
-            pessoa = cursor.fetchone()
-
-            if not pessoa:
-                print("Pessoa não encontrada.")
-                return
-
-            # Verifica se há alimentos suficientes no estoque
-            cursor.execute("SELECT * FROM estoque")
+            cursor.execute("SELECT id, alimento, quantidade FROM estoque")
             estoque = cursor.fetchall()
 
-            if not estoque:
-                print("O estoque está vazio. Não há alimentos disponíveis para distribuição.")
-                return
+            alimentos_disponiveis = {item[1]: item[2] for item in estoque if item[2] > 0}
+            alimentos_distribuidos = []
 
-            alimentos = {row[1]: row[2] for row in estoque}
+            if alimentos_disponiveis:
+                for alimento, quantidade in alimentos_disponiveis.items():
+                    print(f"{alimento}: {quantidade} unidades disponíveis")
+                    qtde_para_distribuir = int(input(f"Quantas unidades de {alimento} deseja distribuir? "))
+                    if qtde_para_distribuir > 0 and qtde_para_distribuir <= quantidade:
+                        alimentos_distribuidos.append(alimento)
+                        cursor.execute("UPDATE estoque SET quantidade = quantidade - %s WHERE alimento = %s", (qtde_para_distribuir, alimento))
+                    else:
+                        print(f"Quantidade inválida para {alimento}. Nenhuma unidade será distribuída.")
 
-            cesta = input("Digite os alimentos da cesta separados por vírgula: ").split(", ")
-            alimentos_disponiveis = True
+            if alimentos_distribuidos:
+                cursor.execute("""
+                    UPDATE pessoa
+                    SET cestas_recebidas = cestas_recebidas + 1,
+                        data_distribuicao = CURRENT_TIMESTAMP,
+                        alimentos_distribuidos = %s
+                    WHERE id = %s
+                """, (', '.join(alimentos_distribuidos), pessoa_id))
 
-            for item in cesta:
-                if item in alimentos:
-                    if alimentos[item] <= 0:
-                        alimentos_disponiveis = False
-                        print(f"Alimento '{item}' está com quantidade insuficiente no estoque.")
-                else:
-                    alimentos_disponiveis = False
-                    print(f"Alimento '{item}' não está disponível no estoque.")
+                cursor.execute("""
+                    INSERT INTO distribuicao_cestas (pessoa_id, alimentos)
+                    VALUES (%s, %s)
+                """, (pessoa_id, ', '.join(alimentos_distribuidos)))
 
-            if not alimentos_disponiveis:
-                print("A cesta não pode ser distribuída devido a alimentos faltando ou com quantidade insuficiente.")
-                return
-
-            # Atualiza o estoque após a distribuição
-            for item in cesta:
-                if item in alimentos:
-                    cursor.execute(
-                        "UPDATE estoque SET quantidade = quantidade - 1 WHERE alimento = %s",
-                        (item,)
-                    )
-
-            cursor.execute(
-                "INSERT INTO distribuicao_cestas (pessoa_id, alimentos) VALUES (%s, %s)",
-                (pessoa_id, ", ".join(cesta))
-            )
-
-            conn.commit()
-            print("Cesta distribuída com sucesso!")
+                conn.commit()
+                print(f"Cesta básica distribuída para a pessoa com ID {pessoa_id}.")
+            else:
+                print("Nenhum alimento foi distribuído. Verifique o estoque.")
     except Exception as e:
-        print("Erro ao distribuir a cesta:", e)
+        print("Erro ao distribuir a cesta básica:", e)
         conn.rollback()
 
 def main():
+    """Função principal que inicializa o banco e oferece as opções para o usuário."""
     init_database()
+    adicionar_colunas_faltantes()
+
     conn = get_connection()
+    try:
+        while True:
+            print("\n===== Sistema de Cestas Básicas =====")
+            print("1. Registrar nova pessoa")
+            print("2. Listar pessoas registradas")
+            print("3. Registrar novos alimentos no estoque")
+            print("4. Listar estoque de alimentos")
+            print("5. Distribuir cesta básica")
+            print("0. Sair")
+            opcao = input("Escolha uma opção: ")
 
-    while True:
-        print("\nSistema de Distribuição de Cestas Básicas")
-        print("1. Registrar Pessoa")
-        print("2. Distribuir Cesta")
-        print("3. Listar Pessoas")
-        print("4. Listar Estoque")
-        print("5. Adicionar Item ao Estoque")
-        print("6. Listar Pessoas Responsáveis")
-        print("7. Sair")
+            if opcao == '1':
+                registrar_pessoa(conn)
+            elif opcao == '2':
+                listar_pessoas(conn)
+            elif opcao == '3':
+                registrar_alimento(conn)
+            elif opcao == '4':
+                listar_estoque(conn)
+            elif opcao == '5':
+                distribuir_cesta(conn)
+            elif opcao == '0':
+                print("Saindo do sistema.")
+                break
+            else:
+                print("Opção inválida! Tente novamente.")
+    finally:
+        conn.close()
 
-        escolha = input("Escolha uma opção: ")
-
-        if escolha == '1':
-            registrar_pessoa(conn)
-        elif escolha == '2':
-            distribuir_cesta(conn)
-        elif escolha == '3':
-            listar_pessoas(conn)
-        elif escolha == '4':
-            listar_estoque(conn)
-        elif escolha == '5':
-            adicionar_estoque(conn)
-        elif escolha == '6':
-            listar_pessoa_responsavel(conn)
-        elif escolha == '7':
-            break
-        else:
-            print("Opção inválida. Tente novamente.")
-
-    conn.close()
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
+input("Pressione Enter para sair...")

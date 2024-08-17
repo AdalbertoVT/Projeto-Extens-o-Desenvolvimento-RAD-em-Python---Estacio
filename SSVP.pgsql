@@ -7,19 +7,19 @@ CREATE TABLE IF NOT EXISTS pessoa_responsavel (
     data_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS pessoa (
-    id SERIAL PRIMARY KEY,
-    nome VARCHAR(255) NOT NULL,
-    endereco TEXT NOT NULL,
-    num_membros INT NOT NULL,
-    cpf VARCHAR(14) NOT NULL,
-    contato VARCHAR(20),
-    id_responsavel INT REFERENCES pessoa_responsavel(id),
-    data_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    data_distribuicao TIMESTAMP,
-    cestas_recebidas INT DEFAULT 0,
-    alimentos_distribuidos TEXT
-);
+ CREATE TABLE IF NOT EXISTS pessoa (
+                    id SERIAL PRIMARY KEY,
+                    nome VARCHAR(255) NOT NULL,
+                    endereco TEXT NOT NULL,
+                    num_membros INT NOT NULL,
+                    cpf VARCHAR(14) NOT NULL,
+                    contato VARCHAR(20),
+                    id_responsavel INT REFERENCES pessoa_responsavel(id),
+                    data_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    data_distribuicao TIMESTAMP,
+                    cestas_recebidas INT DEFAULT 0,
+                    alimentos_distribuidos TEXT
+                );
 
 -- Criação da tabela de estoque
 CREATE TABLE IF NOT EXISTS estoque (

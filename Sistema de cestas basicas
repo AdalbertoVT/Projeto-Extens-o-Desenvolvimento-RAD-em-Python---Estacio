@@ -293,4 +293,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-input("Pressione Enter para sair...")
+input("Pressione Enter para sair...")0
